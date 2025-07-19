@@ -32,11 +32,35 @@ type ollamaResponse struct {
 }
 
 func RunBenchmark(apiURL, model string, prompts []string, trials int) ([]BenchmarkResult, error) {
+	// Print initial message
 	fmt.Printf(i18n.T("msg_model_running")+"\n", model, len(prompts), trials)
+
+	// Start the elapsed time display
+	startTime := time.Now()
+	stopTimer := make(chan bool)
+
+	// Start a goroutine to continuously update the elapsed time
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond) // Update every 500ms
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stopTimer:
+				return
+			case <-ticker.C:
+				elapsed := time.Since(startTime)
+				fmt.Printf("\r⏳ Running benchmark for '%s' with %d prompt(s) x %d trial(s)... %s",
+					model, len(prompts), trials, formatDuration(elapsed))
+			}
+		}
+	}()
 
 	// Warmup: ensure model is loaded
 	_, err := sendPrompt(apiURL, model, "Hello")
 	if err != nil {
+		stopTimer <- true
+		fmt.Print("\n") // Move to next line after stopping timer
 		return nil, fmt.Errorf("warmup failed: %w", err)
 	}
 
@@ -51,6 +75,8 @@ func RunBenchmark(apiURL, model string, prompts []string, trials int) ([]Benchma
 
 			tokenCount, err := sendPrompt(apiURL, model, prompt)
 			if err != nil {
+				stopTimer <- true
+				fmt.Print("\n") // Move to next line after stopping timer
 				return nil, fmt.Errorf(i18n.T("err_prompt_send"), model, err)
 			}
 
@@ -67,6 +93,10 @@ func RunBenchmark(apiURL, model string, prompts []string, trials int) ([]Benchma
 			})
 		}
 	}
+
+	// Stop the timer and move to next line
+	stopTimer <- true
+	fmt.Print("\n")
 
 	return results, nil
 }
@@ -100,4 +130,15 @@ func sendPrompt(apiURL, model, prompt string) (int, error) {
 	}
 
 	return tokenCount, nil
+}
+
+// Helper function to format duration in a nice way
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	} else if d < time.Hour {
+		return fmt.Sprintf("%.1fm", d.Minutes())
+	} else {
+		return fmt.Sprintf("%.1fh", d.Hours())
+	}
 }
