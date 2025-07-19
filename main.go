@@ -87,11 +87,27 @@ func runWithSettings(reader *bufio.Reader) {
 		apiURL = baseOllamaUrl
 	}
 
-	fmt.Print(i18n.T("prompt_prompt_file") + " (default: prompts.txt): ")
+	fmt.Print(i18n.T("prompt_prompt_file") + " (default: built-in prompts): ")
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
+
+	var prompts []string
+	var err error
+
 	if input == "" {
-		input = "prompts.txt"
+		// Use embedded default prompts
+		prompts, err = prompt.GetDefaultPrompts()
+		if err != nil {
+			fmt.Printf("Error loading default prompts: %v\n", err)
+			return
+		}
+	} else {
+		// Use custom file
+		prompts, err = prompt.ReadPromptsFromFile(input)
+		if err != nil {
+			fmt.Printf("Error reading prompt file: %v\n", err)
+			return
+		}
 	}
 
 	fmt.Print(i18n.T("prompt_trials") + " (default: 3): ")
@@ -119,7 +135,6 @@ func runWithSettings(reader *bufio.Reader) {
 	tokensOnlyStr, _ := reader.ReadString('\n')
 	tokensOnly := strings.TrimSpace(strings.ToLower(tokensOnlyStr)) == "e" || tokensOnlyStr == "y"
 
-	prompts, _ := prompt.ReadPromptsFromFile(input)
 	fmt.Println(i18n.T("msg_loading_models"))
 	models, _ := client.GetModelList(apiURL)
 
