@@ -104,9 +104,12 @@ func runWithSettings(reader *bufio.Reader) {
 		}
 	}
 
-	fmt.Print(i18n.T("prompt_output_format") + " (csv/json/txt): ")
+	fmt.Print(i18n.T("prompt_output_format") + " (default: txt): ")
 	format, _ := reader.ReadString('\n')
 	format = strings.TrimSpace(format)
+	if format == "" {
+		format = "txt"
+	}
 	if format != "csv" && format != "json" && format != "txt" {
 		fmt.Println(i18n.T("msg_invalid_format"))
 		return
