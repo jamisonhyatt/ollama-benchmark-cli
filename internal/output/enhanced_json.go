@@ -1,6 +1,8 @@
 package output
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -17,6 +19,7 @@ import (
 // Enhanced data structures for comprehensive analysis
 type BenchmarkExecution struct {
 	Metadata ExecutionMetadata      `json:"metadata"`
+	Prompts  map[string]string      `json:"prompts"`
 	Results  []ModelBenchmarkResult `json:"results"`
 }
 
@@ -66,11 +69,11 @@ type ModelBenchmarkResult struct {
 }
 
 type PromptResult struct {
-	Prompt       string  `json:"prompt"`
-	Trial        int     `json:"trial"`
-	Duration     float64 `json:"duration_seconds"`
-	Tokens       int     `json:"tokens"`
-	TokensPerSec float64 `json:"tokens_per_second"`
+	PromptChecksum string  `json:"prompt_checksum"`
+	Trial          int     `json:"trial"`
+	Duration       float64 `json:"duration_seconds"`
+	Tokens         int     `json:"tokens"`
+	TokensPerSec   float64 `json:"tokens_per_second"`
 }
 
 type AggregatedStats struct {
@@ -114,6 +117,7 @@ func createBenchmarkExecution(results []benchmark.BenchmarkResult, config Benchm
 			},
 			Configuration: config,
 		},
+		Prompts: make(map[string]string),
 		Results: []ModelBenchmarkResult{},
 	}
 
@@ -140,12 +144,18 @@ func createBenchmarkExecution(results []benchmark.BenchmarkResult, config Benchm
 
 		// Process individual prompt results
 		for _, r := range modelResults {
+			// Calculate prompt checksum
+			promptChecksum := calculateChecksum(r.Prompt)
+
+			// Add prompt to prompts map if not already present
+			execution.Prompts[promptChecksum] = r.Prompt
+
 			modelResult.PromptResults = append(modelResult.PromptResults, PromptResult{
-				Prompt:       r.Prompt,
-				Trial:        r.Trial,
-				Duration:     r.Duration.Seconds(),
-				Tokens:       r.Tokens,
-				TokensPerSec: r.TokenPerS,
+				PromptChecksum: promptChecksum,
+				Trial:          r.Trial,
+				Duration:       r.Duration.Seconds(),
+				Tokens:         r.Tokens,
+				TokensPerSec:   r.TokenPerS,
 			})
 
 			totalTime += r.Duration
@@ -190,7 +200,7 @@ func calculateStats(times []float64, tokens []int) AggregatedStats {
 
 	// Calculate standard deviation
 	mean := timeSum / float64(len(times))
-	var variance float64
+	variance := 0.0
 	for _, t := range times {
 		variance += (t - mean) * (t - mean)
 	}
@@ -539,4 +549,10 @@ func detectGCPInfo() CloudInfo {
 	}
 
 	return cloud
+}
+
+// calculateChecksum calculates the SHA-256 checksum of a given string
+func calculateChecksum(text string) string {
+	hash := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(hash[:])
 }

@@ -120,13 +120,29 @@ func runWithSettings(reader *bufio.Reader) {
 		}
 	}
 
-	fmt.Print(i18n.T("prompt_output_format") + " (default: txt, options: csv/json/txt/enhanced-json): ")
-	format, _ := reader.ReadString('\n')
-	format = strings.TrimSpace(format)
-	if format == "" {
-		format = "txt"
+	fmt.Println(i18n.T("prompt_output_format"))
+	fmt.Println("1) TXT")
+	fmt.Println("2) CSV")
+	fmt.Println("3) JSON")
+	fmt.Println("4) Enhanced JSON")
+	fmt.Print("👉 Choose format (default: 1): ")
+	formatChoice, _ := reader.ReadString('\n')
+	formatChoice = strings.TrimSpace(formatChoice)
+	if formatChoice == "" {
+		formatChoice = "1"
 	}
-	if format != "csv" && format != "json" && format != "txt" && format != "enhanced-json" {
+
+	var format string
+	switch formatChoice {
+	case "1":
+		format = "txt"
+	case "2":
+		format = "csv"
+	case "3":
+		format = "json"
+	case "4":
+		format = "enhanced-json"
+	default:
 		fmt.Println(i18n.T("msg_invalid_format"))
 		return
 	}
@@ -210,38 +226,44 @@ func handleResults(results []benchmark.BenchmarkResult, format string, isMultiMo
 		output.PrintDetails(results)
 	}
 
-	modelGroups := output.GroupByModel(results)
-	for model, group := range modelGroups {
-		filename := fmt.Sprintf("benchmark_detail_%s_%s.txt", sanitizeFilename(model), timestamp())
-		output.WriteTXT(filename, group, false)
-	}
-
-	summaryFile := fmt.Sprintf("benchmark_summary_result_%s.%s", timestamp(), format)
-	switch format {
-	case "csv":
-		output.WriteCSV(summaryFile, results)
-	case "json":
-		output.WriteJSON(summaryFile, results)
-	case "txt":
-		output.WriteTXT(summaryFile, results, tokensOnly)
-	case "enhanced-json":
+	if format == "enhanced-json" {
+		// For enhanced-json, only create the enhanced JSON file
 		config := output.BenchmarkConfig{
 			APIEndpoint: apiURL,
 			Trials:      trials,
 			Prompts:     prompts,
 		}
+		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.json", timestamp())
 		output.WriteEnhancedJSON(summaryFile, results, config)
-	}
+		fmt.Printf("✅ "+i18n.T("msg_benchmark_complete")+" Enhanced JSON: %s\n", summaryFile)
+	} else {
+		// For other formats, create all the output files
+		modelGroups := output.GroupByModel(results)
+		for model, group := range modelGroups {
+			filename := fmt.Sprintf("benchmark_detail_%s_%s.txt", sanitizeFilename(model), timestamp())
+			output.WriteTXT(filename, group, false)
+		}
 
-	if len(modelGroups) > 1 {
-		compFile := fmt.Sprintf("benchmark_summary_comparison_%s.txt", timestamp())
-		output.ShowComparison(results)
-		output.WriteComparison(compFile, results)
+		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.%s", timestamp(), format)
+		switch format {
+		case "csv":
+			output.WriteCSV(summaryFile, results)
+		case "json":
+			output.WriteJSON(summaryFile, results)
+		case "txt":
+			output.WriteTXT(summaryFile, results, tokensOnly)
+		}
+
+		if len(modelGroups) > 1 {
+			compFile := fmt.Sprintf("benchmark_summary_comparison_%s.txt", timestamp())
+			output.ShowComparison(results)
+			output.WriteComparison(compFile, results)
+		}
+
+		fmt.Println("✅ " + i18n.T("msg_benchmark_complete") + " Log: benchmark.log")
 	}
 
 	logs.AppendPerformanceLog(results)
-
-	fmt.Println(i18n.T("msg_benchmark_complete"))
 }
 
 func timestamp() string {
