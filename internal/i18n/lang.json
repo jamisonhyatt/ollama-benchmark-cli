@@ -1,7 +1,7 @@
 {
     "en": {
       "menu_title": "Ollama Benchmark CLI",
-      "menu_quick": "1) Quick Start - Fast test with all models (default: prompts.txt)",
+      "menu_quick": "1) Quick Start - Fast test with all models (uses built-in prompts)",
       "menu_settings": "2) Start With Settings - Custom prompt, model and format",
       "prompt_choose_option": "👉 Choose an option:",
       "prompt_api_url": "🌐 Ollama API URL",
@@ -12,7 +12,7 @@
       "msg_loading_models": "📡 Fetching available models...",
       "msg_invalid_choice": "❌ Invalid choice.",
       "msg_invalid_format": "❌ Invalid format. Only csv, json, or txt allowed.",
-        "quick_prompt_path": "📂 Prompt file: prompts.txt (default)",
+        "quick_prompt_path": "📂 Prompts: Using built-in default prompts",
         "quick_trials": "🔁 Trial count: 1",
         "quick_mode": "🛠️  Mode: all models",
         "quick_output": "💾 Output: written to .txt file",
@@ -51,7 +51,7 @@
     },
     "tr": {
       "menu_title": "Ollama Karşılaştırma Aracı",
-      "menu_quick": "1) Hızlı Başlat - Tüm modellerle hızlı test (varsayılan: prompts.txt)",
+      "menu_quick": "1) Hızlı Başlat - Tüm modellerle hızlı test (yerleşik promptlar)",
       "menu_settings": "2) Ayarlarla Başlat - Prompt, model ve format seç",
       "prompt_choose_option": "👉 Seçiminiz:",
       "prompt_api_url": "🌐 Ollama API adresi",
@@ -62,7 +62,7 @@
       "msg_loading_models": "📡 Modeller alınıyor...",
       "msg_invalid_choice": "❌ Geçersiz seçim.",
       "msg_invalid_format": "❌ Geçersiz format. Sadece csv, json, txt desteklenir.",
-        "quick_prompt_path": "📂 Prompt dosyası: prompts.txt (varsayılan)",
+        "quick_prompt_path": "📂 Promptlar: Yerleşik varsayılan promptlar kullanılıyor",
         "quick_trials": "🔁 Trial sayısı: 1",
         "quick_mode": "🛠️  Mod: tüm modeller",
         "quick_output": "💾 Çıktı: .txt dosyasına yazılacak",
@@ -100,4 +100,3 @@
         "msg_model_error": "⚠️  %s için benchmark hatası: %v"
     }
   }
-  

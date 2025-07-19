@@ -69,7 +69,7 @@ func runQuickStart(reader *bufio.Reader) {
 	fmt.Println(i18n.T("quick_log"))
 	fmt.Println(i18n.T("quick_starting"))
 
-	prompts, _ := prompt.ReadPromptsFromFile("prompts.txt")
+	prompts, _ := prompt.GetDefaultPrompts()
 	models, _ := client.GetModelList(apiURL)
 	allResults := runAllModels(apiURL, models, prompts, 1)
 
