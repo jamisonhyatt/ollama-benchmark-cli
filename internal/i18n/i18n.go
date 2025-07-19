@@ -1,20 +1,19 @@
 package i18n
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
-	"os"
 )
+
+//go:embed lang.json
+var langData []byte
 
 var data map[string]map[string]string
 var currentLang = "en"
 
 func Load(lang string) error {
-	file, err := os.ReadFile("internal/i18n/lang.json")
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(file, &data); err != nil {
+	if err := json.Unmarshal(langData, &data); err != nil {
 		return err
 	}
 	if _, ok := data[lang]; ok {
