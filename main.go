@@ -38,6 +38,7 @@ func main() {
 	fmt.Println(i18n.T("menu_title"))
 	fmt.Println(i18n.T("menu_quick"))
 	fmt.Println(i18n.T("menu_settings"))
+	fmt.Println(i18n.T("menu_compare"))
 	fmt.Print(i18n.T("prompt_choose_option") + " ")
 
 	reader := bufio.NewReader(os.Stdin)
@@ -49,6 +50,8 @@ func main() {
 		runQuickStart(reader)
 	case "2":
 		runWithSettings(reader)
+	case "3":
+		runCompareMode(reader)
 	default:
 		fmt.Println(i18n.T("msg_invalid_choice"))
 	}
@@ -136,6 +139,29 @@ func runWithSettings(reader *bufio.Reader) {
 	} else {
 		fmt.Println(i18n.T("msg_invalid_choice"))
 	}
+}
+
+func runCompareMode(reader *bufio.Reader) {
+	fmt.Print(i18n.T("prompt_compare_file1") + ": ")
+	file1, _ := reader.ReadString('\n')
+	file1 = strings.TrimSpace(file1)
+
+	fmt.Print(i18n.T("prompt_compare_file2") + ": ")
+	file2, _ := reader.ReadString('\n')
+	file2 = strings.TrimSpace(file2)
+
+	if file1 == "" || file2 == "" {
+		fmt.Println(i18n.T("msg_invalid_files"))
+		return
+	}
+
+	err := logs.CompareLogFiles(file1, file2)
+	if err != nil {
+		fmt.Printf(i18n.T("msg_compare_error")+"\n", err)
+		return
+	}
+
+	fmt.Println(i18n.T("msg_compare_complete"))
 }
 
 func runAllModels(apiURL string, models []string, prompts []string, trials int) []benchmark.BenchmarkResult {

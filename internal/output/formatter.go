@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"text/tabwriter"
 	"time"
 
+	"github.com/olekukonko/tablewriter"
 	"ollama-benchmark/internal/benchmark"
 	"ollama-benchmark/internal/i18n"
 )
@@ -28,18 +28,31 @@ func FormatAsTable(results []benchmark.BenchmarkResult, tokensOnly bool) {
 		return aggregated[i].TokenPerS > aggregated[j].TokenPerS
 	})
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+	// Prepare data for the table
+	var data [][]string
+
+	// Header row
+	data = append(data, []string{
 		i18n.T("header_model"),
 		i18n.T("header_time"),
 		i18n.T("header_tokens"),
-		i18n.T("header_tps"))
+		i18n.T("header_tps"),
+	})
 
+	// Data rows
 	for _, r := range aggregated {
-		fmt.Fprintf(w, "%s\t%.2f\t%d\t%.1f\n", r.Model, r.AvgDuration.Seconds(), r.TotalTokens, r.TokenPerS)
+		data = append(data, []string{
+			r.Model,
+			fmt.Sprintf("%.2f", r.AvgDuration.Seconds()),
+			fmt.Sprintf("%d", r.TotalTokens),
+			fmt.Sprintf("%.1f", r.TokenPerS),
+		})
 	}
 
-	w.Flush()
+	table := tablewriter.NewWriter(os.Stdout)
+	table.Header(data[0])
+	table.Bulk(data[1:])
+	table.Render()
 }
 
 func PrintDetails(results []benchmark.BenchmarkResult) {
@@ -144,10 +157,22 @@ func ShowComparison(results []benchmark.BenchmarkResult) {
 	})
 
 	fmt.Println()
-	fmt.Println(i18n.T("comparison_title"))
+	fmt.Println("🔍 " + i18n.T("comparison_title"))
 	fmt.Println()
-	fmt.Println(i18n.T("header_model") + "\t" + i18n.T("header_time") + "\t" + i18n.T("header_tokens") + "\t" + i18n.T("header_tps") + "\t" + i18n.T("header_rank"))
 
+	// Prepare data for the table
+	var data [][]string
+
+	// Header row
+	data = append(data, []string{
+		i18n.T("header_model"),
+		i18n.T("header_time"),
+		i18n.T("header_tokens"),
+		i18n.T("header_tps"),
+		i18n.T("header_rank"),
+	})
+
+	// Data rows with rankings
 	for i, r := range agg {
 		rank := "-"
 		switch i {
@@ -158,8 +183,20 @@ func ShowComparison(results []benchmark.BenchmarkResult) {
 		case 2:
 			rank = "🥉"
 		}
-		fmt.Printf("%s\t%.2f\t%d\t%.1f\t%s\n", r.Model, r.AvgDuration.Seconds(), r.TotalTokens, r.TokenPerS, rank)
+
+		data = append(data, []string{
+			r.Model,
+			fmt.Sprintf("%.2f", r.AvgDuration.Seconds()),
+			fmt.Sprintf("%d", r.TotalTokens),
+			fmt.Sprintf("%.1f", r.TokenPerS),
+			rank,
+		})
 	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.Header(data[0])
+	table.Bulk(data[1:])
+	table.Render()
 }
 
 func Aggregate(results []benchmark.BenchmarkResult) []AggregatedResult {
