@@ -80,9 +80,12 @@ func runQuickStart(reader *bufio.Reader) {
 }
 
 func runWithSettings(reader *bufio.Reader) {
-	fmt.Print(i18n.T("prompt_api_url") + ": ")
+	fmt.Print(i18n.T("prompt_api_url") + " (default: " + baseOllamaUrl + "): ")
 	apiURL, _ := reader.ReadString('\n')
 	apiURL = strings.TrimSpace(apiURL)
+	if apiURL == "" {
+		apiURL = baseOllamaUrl
+	}
 
 	fmt.Print(i18n.T("prompt_prompt_file") + " (default: prompts.txt): ")
 	input, _ := reader.ReadString('\n')
