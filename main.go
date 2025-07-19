@@ -271,7 +271,6 @@ func runAutomatedSettings(config Config) {
 		// Run benchmarks for specified models
 		var results []benchmark.BenchmarkResult
 		for _, model := range config.Models {
-			fmt.Printf("⏳ Running benchmark for '%s'...\n", model)
 			r, err := benchmark.RunBenchmark(config.APIUrl, model, prompts, config.Trials)
 			if err != nil {
 				fmt.Printf("Error running benchmark for model %s: %v\n", model, err)
