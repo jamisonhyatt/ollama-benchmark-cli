@@ -26,7 +26,7 @@ type Config struct {
 	APIUrl       string
 	Trials       int
 	Format       string
-	Model        string
+	Models       []string // Changed from Model string to Models []string
 	TokensOnly   bool
 	PromptFile   string
 	CompareFile1 string
@@ -52,6 +52,7 @@ func main() {
 
 func parseFlags() Config {
 	var config Config
+	var modelsFlag string
 
 	// Define flags
 	flag.StringVar(&config.Language, "lang", "", "Language (en, tr)")
@@ -59,7 +60,7 @@ func parseFlags() Config {
 	flag.StringVar(&config.APIUrl, "api-url", baseOllamaUrl, "Ollama API URL")
 	flag.IntVar(&config.Trials, "trials", 3, "Number of trials")
 	flag.StringVar(&config.Format, "format", "txt", "Output format (txt, csv, json, enhanced-json)")
-	flag.StringVar(&config.Model, "model", "", "Model name or 'all' for all models")
+	flag.StringVar(&modelsFlag, "models", "", "Comma-separated model names or 'all' for all models")
 	flag.BoolVar(&config.TokensOnly, "tokens-only", false, "Sort only by tokens per second")
 	flag.StringVar(&config.PromptFile, "prompt-file", "", "Path to prompt file (default: built-in prompts)")
 	flag.StringVar(&config.CompareFile1, "file1", "", "First file for comparison mode")
@@ -72,13 +73,30 @@ func parseFlags() Config {
 		fmt.Fprintf(os.Stderr, "  %s         # Interactive mode\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  %s --lang=en --mode=quick --format=enhanced-json\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --lang=en --mode=settings --trials=5 --model=llama3.1:8b\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --lang=en --mode=settings --trials=5 --models=llama3.1:8b,qwen2.5:7b\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --lang=en --mode=settings --models=all\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s --lang=en --mode=compare --file1=log1.txt --file2=log2.txt\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
 	}
 
 	flag.Parse()
+
+	// Parse models flag
+	if modelsFlag != "" {
+		if modelsFlag == "all" {
+			config.Models = []string{"all"}
+		} else {
+			// Split comma-separated models and trim whitespace
+			models := strings.Split(modelsFlag, ",")
+			for _, model := range models {
+				trimmed := strings.TrimSpace(model)
+				if trimmed != "" {
+					config.Models = append(config.Models, trimmed)
+				}
+			}
+		}
+	}
 
 	// Check if any flags were provided
 	config.Interactive = true
@@ -227,32 +245,44 @@ func runAutomatedSettings(config Config) {
 	}
 
 	// Run benchmarks
-	if config.Model == "all" || config.Model == "" {
+	if len(config.Models) == 0 || (len(config.Models) == 1 && config.Models[0] == "all") {
+		// Use all models
 		allResults := runAllModels(config.APIUrl, models, prompts, config.Trials)
 		handleResults(allResults, config.Format, true, config.TokensOnly, config.APIUrl, prompts, config.Trials)
 	} else {
-		// Check if specified model exists
-		modelExists := false
-		for _, m := range models {
-			if m == config.Model {
-				modelExists = true
-				break
-			}
-		}
-		if !modelExists {
-			fmt.Printf("Error: Model '%s' not found. Available models:\n", config.Model)
+		// Validate all specified models exist first
+		for _, model := range config.Models {
+			modelExists := false
 			for _, m := range models {
-				fmt.Printf("  - %s\n", m)
+				if m == model {
+					modelExists = true
+					break
+				}
 			}
-			return
+			if !modelExists {
+				fmt.Printf("Error: Model '%s' not found. Available models:\n", model)
+				for _, m := range models {
+					fmt.Printf("  - %s\n", m)
+				}
+				return
+			}
 		}
 
-		results, err := benchmark.RunBenchmark(config.APIUrl, config.Model, prompts, config.Trials)
-		if err != nil {
-			fmt.Printf("Error running benchmark: %v\n", err)
-			return
+		// Run benchmarks for specified models
+		var results []benchmark.BenchmarkResult
+		for _, model := range config.Models {
+			fmt.Printf("⏳ Running benchmark for '%s'...\n", model)
+			r, err := benchmark.RunBenchmark(config.APIUrl, model, prompts, config.Trials)
+			if err != nil {
+				fmt.Printf("Error running benchmark for model %s: %v\n", model, err)
+				continue
+			}
+			results = append(results, r...)
 		}
-		handleResults(results, config.Format, false, config.TokensOnly, config.APIUrl, prompts, config.Trials)
+
+		// Determine if this is multi-model (more than 1 model)
+		isMultiModel := len(config.Models) > 1
+		handleResults(results, config.Format, isMultiModel, config.TokensOnly, config.APIUrl, prompts, config.Trials)
 	}
 }
 
