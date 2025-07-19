@@ -32,16 +32,13 @@ type ollamaResponse struct {
 }
 
 func RunBenchmark(apiURL, model string, prompts []string, trials int) ([]BenchmarkResult, error) {
-	// Print initial message
-	fmt.Printf(i18n.T("msg_model_running")+"\n", model, len(prompts), trials)
-
 	// Start the elapsed time display
 	startTime := time.Now()
 	stopTimer := make(chan bool)
 
 	// Start a goroutine to continuously update the elapsed time
 	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond) // Update every 500ms
+		ticker := time.NewTicker(time.Second) // Update every 500ms
 		defer ticker.Stop()
 
 		for {

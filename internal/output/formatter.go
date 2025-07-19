@@ -9,18 +9,22 @@ import (
 	"sort"
 	"time"
 
-	"github.com/olekukonko/tablewriter"
 	"ollama-benchmark/internal/benchmark"
 	"ollama-benchmark/internal/i18n"
+
+	"github.com/olekukonko/tablewriter"
 )
 
+// AggregatedResult holds the aggregated benchmark results for a model.
 type AggregatedResult struct {
-	Model       string
-	AvgDuration time.Duration
-	TotalTokens int
-	TokenPerS   float64
+	Model       string        // Model name
+	TotalTime   time.Duration // Total time taken for all trials
+	AvgDuration time.Duration // Average time per trial
+	TotalTokens int           // Total number of tokens processed
+	TokenPerS   float64       // Tokens processed per second
 }
 
+// FormatAsTable displays the benchmark results in a tabular format.
 func FormatAsTable(results []benchmark.BenchmarkResult, tokensOnly bool) {
 	aggregated := Aggregate(results)
 
@@ -34,7 +38,8 @@ func FormatAsTable(results []benchmark.BenchmarkResult, tokensOnly bool) {
 	// Header row
 	data = append(data, []string{
 		i18n.T("header_model"),
-		i18n.T("header_time"),
+		"Total Time (s)",
+		"Avg Time (s)",
 		i18n.T("header_tokens"),
 		i18n.T("header_tps"),
 	})
@@ -43,6 +48,7 @@ func FormatAsTable(results []benchmark.BenchmarkResult, tokensOnly bool) {
 	for _, r := range aggregated {
 		data = append(data, []string{
 			r.Model,
+			fmt.Sprintf("%.2f", r.TotalTime.Seconds()),
 			fmt.Sprintf("%.2f", r.AvgDuration.Seconds()),
 			fmt.Sprintf("%d", r.TotalTokens),
 			fmt.Sprintf("%.1f", r.TokenPerS),
@@ -55,6 +61,7 @@ func FormatAsTable(results []benchmark.BenchmarkResult, tokensOnly bool) {
 	table.Render()
 }
 
+// PrintDetails outputs the detailed results of each benchmark trial.
 func PrintDetails(results []benchmark.BenchmarkResult) {
 	fmt.Println("\n" + i18n.T("details_title"))
 	for _, r := range results {
@@ -66,6 +73,7 @@ func PrintDetails(results []benchmark.BenchmarkResult) {
 	}
 }
 
+// GroupByModel organizes the benchmark results by model.
 func GroupByModel(results []benchmark.BenchmarkResult) map[string][]benchmark.BenchmarkResult {
 	m := make(map[string][]benchmark.BenchmarkResult)
 	for _, r := range results {
@@ -74,6 +82,7 @@ func GroupByModel(results []benchmark.BenchmarkResult) map[string][]benchmark.Be
 	return m
 }
 
+// WriteJSON saves the benchmark results in JSON format to the specified file.
 func WriteJSON(path string, results []benchmark.BenchmarkResult) error {
 	if err := ensureDir(path); err != nil {
 		return err
@@ -86,6 +95,7 @@ func WriteJSON(path string, results []benchmark.BenchmarkResult) error {
 	return os.WriteFile(path, data, 0644)
 }
 
+// WriteCSV saves the benchmark results in CSV format to the specified file.
 func WriteCSV(path string, results []benchmark.BenchmarkResult) error {
 	if err := ensureDir(path); err != nil {
 		return err
@@ -118,6 +128,7 @@ func WriteCSV(path string, results []benchmark.BenchmarkResult) error {
 	return nil
 }
 
+// WriteTXT saves the benchmark results in a plain text format to the specified file.
 func WriteTXT(path string, results []benchmark.BenchmarkResult, tokensOnly bool) error {
 	if err := ensureDir(path); err != nil {
 		return err
@@ -149,6 +160,7 @@ func WriteTXT(path string, results []benchmark.BenchmarkResult, tokensOnly bool)
 	return nil
 }
 
+// ShowComparison displays a comparison of the benchmark results across different models.
 func ShowComparison(results []benchmark.BenchmarkResult) {
 	agg := Aggregate(results)
 
@@ -199,6 +211,7 @@ func ShowComparison(results []benchmark.BenchmarkResult) {
 	table.Render()
 }
 
+// Aggregate consolidates the benchmark results for each model.
 func Aggregate(results []benchmark.BenchmarkResult) []AggregatedResult {
 	grouped := make(map[string][]benchmark.BenchmarkResult)
 
@@ -217,12 +230,13 @@ func Aggregate(results []benchmark.BenchmarkResult) []AggregatedResult {
 		}
 
 		count := len(group)
-		avgTime := totalTime / time.Duration(count)
+		// Use total time instead of average time to match the live timer
 		tps := float64(totalTokens) / totalTime.Seconds()
 
 		aggregated = append(aggregated, AggregatedResult{
 			Model:       model,
-			AvgDuration: avgTime,
+			TotalTime:   totalTime,
+			AvgDuration: totalTime / time.Duration(count),
 			TotalTokens: totalTokens,
 			TokenPerS:   tps,
 		})

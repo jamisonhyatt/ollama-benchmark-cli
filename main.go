@@ -76,7 +76,7 @@ func runQuickStart(reader *bufio.Reader) {
 	models, _ := client.GetModelList(apiURL)
 	allResults := runAllModels(apiURL, models, prompts, 1)
 
-	handleResults(allResults, "txt", true, false)
+	handleResults(allResults, "txt", true, false, apiURL, prompts, 1)
 }
 
 func runWithSettings(reader *bufio.Reader) {
@@ -120,13 +120,13 @@ func runWithSettings(reader *bufio.Reader) {
 		}
 	}
 
-	fmt.Print(i18n.T("prompt_output_format") + " (default: txt): ")
+	fmt.Print(i18n.T("prompt_output_format") + " (default: txt, options: csv/json/txt/enhanced-json): ")
 	format, _ := reader.ReadString('\n')
 	format = strings.TrimSpace(format)
 	if format == "" {
 		format = "txt"
 	}
-	if format != "csv" && format != "json" && format != "txt" {
+	if format != "csv" && format != "json" && format != "txt" && format != "enhanced-json" {
 		fmt.Println(i18n.T("msg_invalid_format"))
 		return
 	}
@@ -153,10 +153,10 @@ func runWithSettings(reader *bufio.Reader) {
 	if choice > 0 && choice <= len(models) {
 		model := models[choice-1]
 		results, _ := benchmark.RunBenchmark(apiURL, model, prompts, trials)
-		handleResults(results, format, false, tokensOnly)
+		handleResults(results, format, false, tokensOnly, apiURL, prompts, trials)
 	} else if choice == len(models)+1 {
 		allResults := runAllModels(apiURL, models, prompts, trials)
-		handleResults(allResults, format, true, tokensOnly)
+		handleResults(allResults, format, true, tokensOnly, apiURL, prompts, trials)
 	} else {
 		fmt.Println(i18n.T("msg_invalid_choice"))
 	}
@@ -198,7 +198,7 @@ func runAllModels(apiURL string, models []string, prompts []string, trials int) 
 	return allResults
 }
 
-func handleResults(results []benchmark.BenchmarkResult, format string, isMultiModel bool, tokensOnly bool) {
+func handleResults(results []benchmark.BenchmarkResult, format string, isMultiModel bool, tokensOnly bool, apiURL string, prompts []string, trials int) {
 	if len(results) == 0 {
 		fmt.Println(i18n.T("msg_no_results"))
 		return
@@ -224,6 +224,13 @@ func handleResults(results []benchmark.BenchmarkResult, format string, isMultiMo
 		output.WriteJSON(summaryFile, results)
 	case "txt":
 		output.WriteTXT(summaryFile, results, tokensOnly)
+	case "enhanced-json":
+		config := output.BenchmarkConfig{
+			APIEndpoint: apiURL,
+			Trials:      trials,
+			Prompts:     prompts,
+		}
+		output.WriteEnhancedJSON(summaryFile, results, config)
 	}
 
 	if len(modelGroups) > 1 {
