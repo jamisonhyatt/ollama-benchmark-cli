@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -18,7 +19,119 @@ import (
 
 const baseOllamaUrl string = "http://localhost:11434"
 
+// Config holds all configuration options
+type Config struct {
+	Language     string
+	Mode         string
+	APIUrl       string
+	Trials       int
+	Format       string
+	Model        string
+	TokensOnly   bool
+	PromptFile   string
+	CompareFile1 string
+	CompareFile2 string
+	Interactive  bool
+}
+
 func main() {
+	config := parseFlags()
+
+	// Load language
+	if err := i18n.Load(config.Language); err != nil {
+		fmt.Printf("⚠️ Language file error: %v\n", err)
+		return
+	}
+
+	if config.Interactive {
+		runInteractiveMode()
+	} else {
+		runAutomatedMode(config)
+	}
+}
+
+func parseFlags() Config {
+	var config Config
+
+	// Define flags
+	flag.StringVar(&config.Language, "lang", "", "Language (en, tr)")
+	flag.StringVar(&config.Mode, "mode", "", "Mode (quick, settings, compare)")
+	flag.StringVar(&config.APIUrl, "api-url", baseOllamaUrl, "Ollama API URL")
+	flag.IntVar(&config.Trials, "trials", 3, "Number of trials")
+	flag.StringVar(&config.Format, "format", "txt", "Output format (txt, csv, json, enhanced-json)")
+	flag.StringVar(&config.Model, "model", "", "Model name or 'all' for all models")
+	flag.BoolVar(&config.TokensOnly, "tokens-only", false, "Sort only by tokens per second")
+	flag.StringVar(&config.PromptFile, "prompt-file", "", "Path to prompt file (default: built-in prompts)")
+	flag.StringVar(&config.CompareFile1, "file1", "", "First file for comparison mode")
+	flag.StringVar(&config.CompareFile2, "file2", "", "Second file for comparison mode")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Ollama Benchmark CLI\n\n")
+		fmt.Fprintf(os.Stderr, "Usage:\n")
+		fmt.Fprintf(os.Stderr, "  %s [flags]  # Non-interactive mode\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s         # Interactive mode\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Examples:\n")
+		fmt.Fprintf(os.Stderr, "  %s --lang=en --mode=quick --format=enhanced-json\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --lang=en --mode=settings --trials=5 --model=llama3.1:8b\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s --lang=en --mode=compare --file1=log1.txt --file2=log2.txt\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Flags:\n")
+		flag.PrintDefaults()
+	}
+
+	flag.Parse()
+
+	// Check if any flags were provided
+	config.Interactive = true
+	flag.Visit(func(f *flag.Flag) {
+		config.Interactive = false
+	})
+
+	// If non-interactive, validate required fields
+	if !config.Interactive {
+		if config.Language == "" {
+			config.Language = "en" // Default language
+		}
+		if config.Mode == "" {
+			fmt.Fprintf(os.Stderr, "Error: --mode is required in non-interactive mode\n")
+			flag.Usage()
+			os.Exit(1)
+		}
+		if err := validateConfig(config); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	return config
+}
+
+func validateConfig(config Config) error {
+	// Validate language
+	if config.Language != "en" && config.Language != "tr" {
+		return fmt.Errorf("invalid language: %s (supported: en, tr)", config.Language)
+	}
+
+	// Validate mode
+	if config.Mode != "quick" && config.Mode != "settings" && config.Mode != "compare" {
+		return fmt.Errorf("invalid mode: %s (supported: quick, settings, compare)", config.Mode)
+	}
+
+	// Validate format
+	if config.Format != "txt" && config.Format != "csv" && config.Format != "json" && config.Format != "enhanced-json" {
+		return fmt.Errorf("invalid format: %s (supported: txt, csv, json, enhanced-json)", config.Format)
+	}
+
+	// Validate compare mode requirements
+	if config.Mode == "compare" {
+		if config.CompareFile1 == "" || config.CompareFile2 == "" {
+			return fmt.Errorf("compare mode requires both --file1 and --file2")
+		}
+	}
+
+	return nil
+}
+
+func runInteractiveMode() {
 	fmt.Println("🌍 Language / Dil seçin:")
 	fmt.Println("1) English")
 	fmt.Println("2) Türkçe")
@@ -55,6 +168,174 @@ func main() {
 	default:
 		fmt.Println(i18n.T("msg_invalid_choice"))
 	}
+}
+
+func runAutomatedMode(config Config) {
+	switch config.Mode {
+	case "quick":
+		runAutomatedQuick(config)
+	case "settings":
+		runAutomatedSettings(config)
+	case "compare":
+		runAutomatedCompare(config)
+	}
+}
+
+func runAutomatedQuick(config Config) {
+	fmt.Println(i18n.T("quick_starting"))
+
+	prompts, err := prompt.GetDefaultPrompts()
+	if err != nil {
+		fmt.Printf("Error loading default prompts: %v\n", err)
+		return
+	}
+
+	models, err := client.GetModelList(config.APIUrl)
+	if err != nil {
+		fmt.Printf("Error fetching models: %v\n", err)
+		return
+	}
+
+	allResults := runAllModels(config.APIUrl, models, prompts, 1)
+	handleResults(allResults, config.Format, true, config.TokensOnly, config.APIUrl, prompts, 1)
+}
+
+func runAutomatedSettings(config Config) {
+	var prompts []string
+	var err error
+
+	// Get prompts
+	if config.PromptFile == "" {
+		prompts, err = prompt.GetDefaultPrompts()
+		if err != nil {
+			fmt.Printf("Error loading default prompts: %v\n", err)
+			return
+		}
+	} else {
+		prompts, err = prompt.ReadPromptsFromFile(config.PromptFile)
+		if err != nil {
+			fmt.Printf("Error reading prompt file: %v\n", err)
+			return
+		}
+	}
+
+	// Get models
+	models, err := client.GetModelList(config.APIUrl)
+	if err != nil {
+		fmt.Printf("Error fetching models: %v\n", err)
+		return
+	}
+
+	// Run benchmarks
+	if config.Model == "all" || config.Model == "" {
+		allResults := runAllModels(config.APIUrl, models, prompts, config.Trials)
+		handleResults(allResults, config.Format, true, config.TokensOnly, config.APIUrl, prompts, config.Trials)
+	} else {
+		// Check if specified model exists
+		modelExists := false
+		for _, m := range models {
+			if m == config.Model {
+				modelExists = true
+				break
+			}
+		}
+		if !modelExists {
+			fmt.Printf("Error: Model '%s' not found. Available models:\n", config.Model)
+			for _, m := range models {
+				fmt.Printf("  - %s\n", m)
+			}
+			return
+		}
+
+		results, err := benchmark.RunBenchmark(config.APIUrl, config.Model, prompts, config.Trials)
+		if err != nil {
+			fmt.Printf("Error running benchmark: %v\n", err)
+			return
+		}
+		handleResults(results, config.Format, false, config.TokensOnly, config.APIUrl, prompts, config.Trials)
+	}
+}
+
+func runAutomatedCompare(config Config) {
+	err := logs.CompareLogFiles(config.CompareFile1, config.CompareFile2)
+	if err != nil {
+		fmt.Printf(i18n.T("msg_compare_error")+"\n", err)
+		return
+	}
+	fmt.Println(i18n.T("msg_compare_complete"))
+}
+
+func runAllModels(apiURL string, models []string, prompts []string, trials int) []benchmark.BenchmarkResult {
+	var allResults []benchmark.BenchmarkResult
+	for _, model := range models {
+		results, err := benchmark.RunBenchmark(apiURL, model, prompts, trials)
+		if err != nil {
+			fmt.Printf(i18n.T("msg_model_error")+"\n", model, err)
+			continue
+		}
+		allResults = append(allResults, results...)
+	}
+	return allResults
+}
+
+func handleResults(results []benchmark.BenchmarkResult, format string, isMultiModel bool, tokensOnly bool, apiURL string, prompts []string, trials int) {
+	if len(results) == 0 {
+		fmt.Println(i18n.T("msg_no_results"))
+		return
+	}
+
+	output.FormatAsTable(results, tokensOnly)
+
+	if !isMultiModel {
+		output.PrintDetails(results)
+	}
+
+	if format == "enhanced-json" {
+		// For enhanced-json, only create the enhanced JSON file
+		config := output.BenchmarkConfig{
+			APIEndpoint: apiURL,
+			Trials:      trials,
+			Prompts:     prompts,
+		}
+		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.json", timestamp())
+		output.WriteEnhancedJSON(summaryFile, results, config)
+		fmt.Printf("✅ "+i18n.T("msg_benchmark_complete")+" Enhanced JSON: %s\n", summaryFile)
+	} else {
+		// For other formats, create all the output files
+		modelGroups := output.GroupByModel(results)
+		for model, group := range modelGroups {
+			filename := fmt.Sprintf("benchmark_detail_%s_%s.txt", sanitizeFilename(model), timestamp())
+			output.WriteTXT(filename, group, false)
+		}
+
+		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.%s", timestamp(), format)
+		switch format {
+		case "csv":
+			output.WriteCSV(summaryFile, results)
+		case "json":
+			output.WriteJSON(summaryFile, results)
+		case "txt":
+			output.WriteTXT(summaryFile, results, tokensOnly)
+		}
+
+		if len(modelGroups) > 1 {
+			compFile := fmt.Sprintf("benchmark_summary_comparison_%s.txt", timestamp())
+			output.ShowComparison(results)
+			output.WriteComparison(compFile, results)
+		}
+
+		fmt.Println("✅ " + i18n.T("msg_benchmark_complete") + " Log: benchmark.log")
+	}
+
+	logs.AppendPerformanceLog(results)
+}
+
+func timestamp() string {
+	return time.Now().Format("20060102-150405")
+}
+
+func sanitizeFilename(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, ":", "_"), "/", "_")
 }
 
 func runQuickStart(reader *bufio.Reader) {
@@ -199,77 +480,4 @@ func runCompareMode(reader *bufio.Reader) {
 	}
 
 	fmt.Println(i18n.T("msg_compare_complete"))
-}
-
-func runAllModels(apiURL string, models []string, prompts []string, trials int) []benchmark.BenchmarkResult {
-	var allResults []benchmark.BenchmarkResult
-	for _, model := range models {
-		results, err := benchmark.RunBenchmark(apiURL, model, prompts, trials)
-		if err != nil {
-			fmt.Printf(i18n.T("msg_model_error")+"\n", model, err)
-			continue
-		}
-		allResults = append(allResults, results...)
-	}
-	return allResults
-}
-
-func handleResults(results []benchmark.BenchmarkResult, format string, isMultiModel bool, tokensOnly bool, apiURL string, prompts []string, trials int) {
-	if len(results) == 0 {
-		fmt.Println(i18n.T("msg_no_results"))
-		return
-	}
-
-	output.FormatAsTable(results, tokensOnly)
-
-	if !isMultiModel {
-		output.PrintDetails(results)
-	}
-
-	if format == "enhanced-json" {
-		// For enhanced-json, only create the enhanced JSON file
-		config := output.BenchmarkConfig{
-			APIEndpoint: apiURL,
-			Trials:      trials,
-			Prompts:     prompts,
-		}
-		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.json", timestamp())
-		output.WriteEnhancedJSON(summaryFile, results, config)
-		fmt.Printf("✅ "+i18n.T("msg_benchmark_complete")+" Enhanced JSON: %s\n", summaryFile)
-	} else {
-		// For other formats, create all the output files
-		modelGroups := output.GroupByModel(results)
-		for model, group := range modelGroups {
-			filename := fmt.Sprintf("benchmark_detail_%s_%s.txt", sanitizeFilename(model), timestamp())
-			output.WriteTXT(filename, group, false)
-		}
-
-		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.%s", timestamp(), format)
-		switch format {
-		case "csv":
-			output.WriteCSV(summaryFile, results)
-		case "json":
-			output.WriteJSON(summaryFile, results)
-		case "txt":
-			output.WriteTXT(summaryFile, results, tokensOnly)
-		}
-
-		if len(modelGroups) > 1 {
-			compFile := fmt.Sprintf("benchmark_summary_comparison_%s.txt", timestamp())
-			output.ShowComparison(results)
-			output.WriteComparison(compFile, results)
-		}
-
-		fmt.Println("✅ " + i18n.T("msg_benchmark_complete") + " Log: benchmark.log")
-	}
-
-	logs.AppendPerformanceLog(results)
-}
-
-func timestamp() string {
-	return time.Now().Format("20060102-150405")
-}
-
-func sanitizeFilename(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, ":", "_"), "/", "_")
 }
