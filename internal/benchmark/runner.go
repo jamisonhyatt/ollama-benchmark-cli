@@ -34,6 +34,15 @@ type ollamaResponse struct {
 func RunBenchmark(apiURL, model string, prompts []string, trials int) ([]BenchmarkResult, error) {
 	fmt.Printf(i18n.T("msg_model_running")+"\n", model, len(prompts), trials)
 
+	// Warmup: ensure model is loaded
+	_, err := sendPrompt(apiURL, model, "Hello")
+	if err != nil {
+		return nil, fmt.Errorf("warmup failed: %w", err)
+	}
+
+	// Small delay to ensure model is fully loaded
+	time.Sleep(1 * time.Second)
+
 	var results []BenchmarkResult
 
 	for _, prompt := range prompts {
