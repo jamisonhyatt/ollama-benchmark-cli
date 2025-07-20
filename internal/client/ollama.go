@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -40,4 +41,38 @@ func GetModelList(apiURL string) ([]string, error) {
 	}
 
 	return modelNames, nil
+}
+
+// UnloadModelRequest represents the request to unload a model
+type UnloadModelRequest struct {
+	Model     string `json:"model"`
+	KeepAlive string `json:"keep_alive"`
+}
+
+// UnloadModel tells Ollama to unload a specific model from memory
+func UnloadModel(apiURL, modelName string) error {
+	url := fmt.Sprintf("%s/api/generate", apiURL)
+
+	// Setting keep_alive to "0" immediately unloads the model
+	requestBody := UnloadModelRequest{
+		Model:     modelName,
+		KeepAlive: "0",
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal unload request: %v", err)
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to send unload request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("unload request failed with status: %s", resp.Status)
+	}
+
+	return nil
 }

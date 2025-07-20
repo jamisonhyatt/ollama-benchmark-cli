@@ -178,7 +178,8 @@ func ShowComparison(results []benchmark.BenchmarkResult) {
 	// Header row
 	data = append(data, []string{
 		i18n.T("header_model"),
-		i18n.T("header_time"),
+		"Total Time (s)",
+		"Avg Time (s)",
 		i18n.T("header_tokens"),
 		i18n.T("header_tps"),
 		i18n.T("header_rank"),
@@ -198,6 +199,7 @@ func ShowComparison(results []benchmark.BenchmarkResult) {
 
 		data = append(data, []string{
 			r.Model,
+			fmt.Sprintf("%.2f", r.TotalTime.Seconds()),
 			fmt.Sprintf("%.2f", r.AvgDuration.Seconds()),
 			fmt.Sprintf("%d", r.TotalTokens),
 			fmt.Sprintf("%.1f", r.TokenPerS),

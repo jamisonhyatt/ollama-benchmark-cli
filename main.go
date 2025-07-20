@@ -277,6 +277,12 @@ func runAutomatedSettings(config Config) {
 				continue
 			}
 			results = append(results, r...)
+
+			// Unload the model after benchmarking to free memory
+			if err := client.UnloadModel(config.APIUrl, model); err != nil {
+				fmt.Printf("Warning: Failed to unload model %s: %v\n", model, err)
+				// Continue anyway - this is not a critical error
+			}
 		}
 
 		// Determine if this is multi-model (more than 1 model)
@@ -303,6 +309,12 @@ func runAllModels(apiURL string, models []string, prompts []string, trials int) 
 			continue
 		}
 		allResults = append(allResults, results...)
+
+		// Unload the model after benchmarking to free memory
+		if err := client.UnloadModel(apiURL, model); err != nil {
+			fmt.Printf("Warning: Failed to unload model %s: %v\n", model, err)
+			// Continue anyway - this is not a critical error
+		}
 	}
 	return allResults
 }
@@ -317,6 +329,11 @@ func handleResults(results []benchmark.BenchmarkResult, format string, isMultiMo
 
 	if !isMultiModel {
 		output.PrintDetails(results)
+	}
+
+	// Show comparison for multi-model runs (regardless of output format)
+	if isMultiModel {
+		output.ShowComparison(results)
 	}
 
 	if format == "enhanced-json" {
@@ -349,7 +366,6 @@ func handleResults(results []benchmark.BenchmarkResult, format string, isMultiMo
 
 		if len(modelGroups) > 1 {
 			compFile := fmt.Sprintf("benchmark_summary_comparison_%s.txt", timestamp())
-			output.ShowComparison(results)
 			output.WriteComparison(compFile, results)
 		}
 
