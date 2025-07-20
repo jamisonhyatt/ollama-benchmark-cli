@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"ollama-benchmark/internal/benchmark"
+
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -753,14 +754,8 @@ func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, 
 		}
 
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader(data[0])
-		table.SetBorder(true)
-		table.SetCenterSeparator("│")
-		table.SetColumnSeparator("│")
-		table.SetRowSeparator("─")
-		table.SetHeaderAlignment(tablewriter.ALIGN_CENTER)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
-		table.AppendBulk(data[1:])
+		table.Header(data[0])
+		table.Bulk(data[1:])
 		table.Render()
 		fmt.Println()
 	}
