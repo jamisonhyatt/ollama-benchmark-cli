@@ -139,10 +139,10 @@ func validateConfig(config Config) error {
 		return fmt.Errorf("invalid format: %s (supported: txt, csv, json, enhanced-json)", config.Format)
 	}
 
-	// Validate compare mode requirements
+	// Validate compare mode requirements - allow single file for summary evaluation
 	if config.Mode == "compare" {
-		if config.CompareFile1 == "" || config.CompareFile2 == "" {
-			return fmt.Errorf("compare mode requires both --file1 and --file2")
+		if config.CompareFile1 == "" {
+			return fmt.Errorf("compare mode requires at least --file1 (use --file2 for comparison, or single file for summary evaluation)")
 		}
 	}
 
@@ -292,12 +292,31 @@ func runAutomatedSettings(config Config) {
 }
 
 func runAutomatedCompare(config Config) {
-	err := logs.CompareLogFiles(config.CompareFile1, config.CompareFile2)
-	if err != nil {
-		fmt.Printf(i18n.T("msg_compare_error")+"\n", err)
-		return
+	// Check if we have two files for comparison or one file for evaluation
+	if config.CompareFile2 == "" {
+		// Single file - check if it's an enhanced-json file for evaluation
+		if strings.HasSuffix(strings.ToLower(config.CompareFile1), ".json") {
+			// Try to evaluate as enhanced-json summary
+			err := output.EvaluateSummaryFile(config.CompareFile1)
+			if err != nil {
+				fmt.Printf("Error evaluating summary file: %v\n", err)
+				return
+			}
+		} else {
+			// Not a JSON file, can't evaluate
+			fmt.Printf("Error: Single file evaluation requires an enhanced-json (.json) file\n")
+			fmt.Printf("For comparing two log files, provide both --file1 and --file2\n")
+			return
+		}
+	} else {
+		// Two files - do traditional comparison
+		err := logs.CompareLogFiles(config.CompareFile1, config.CompareFile2)
+		if err != nil {
+			fmt.Printf(i18n.T("msg_compare_error")+"\n", err)
+			return
+		}
+		fmt.Println(i18n.T("msg_compare_complete"))
 	}
-	fmt.Println(i18n.T("msg_compare_complete"))
 }
 
 func runAllModels(apiURL string, models []string, prompts []string, trials int) []benchmark.BenchmarkResult {

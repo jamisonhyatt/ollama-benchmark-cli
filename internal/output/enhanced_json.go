@@ -10,10 +10,12 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
 	"ollama-benchmark/internal/benchmark"
+	"github.com/olekukonko/tablewriter"
 )
 
 // Enhanced data structures for comprehensive analysis
@@ -555,4 +557,267 @@ func detectGCPInfo() CloudInfo {
 func calculateChecksum(text string) string {
 	hash := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(hash[:])
+}
+
+// EvaluateSummaryFile reads an enhanced-json summary file and displays performance analysis metrics
+func EvaluateSummaryFile(filePath string) error {
+	// Read the file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Parse the JSON
+	var execution BenchmarkExecution
+	if err := json.Unmarshal(data, &execution); err != nil {
+		return fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	// Display summary information
+	fmt.Printf("📊 Benchmark Summary Analysis\n")
+	fmt.Printf("═══════════════════════════════════════\n")
+	fmt.Printf("🕐 Execution Time: %s\n", execution.Metadata.Timestamp.Format("2006-01-02 15:04:05"))
+	fmt.Printf("⚙️  Configuration: %d trials, %d prompts\n", execution.Metadata.Configuration.Trials, len(execution.Metadata.Configuration.Prompts))
+	fmt.Printf("🖥️  Hardware: %s/%s (%d CPUs)\n", execution.Metadata.Hardware.OS, execution.Metadata.Hardware.Architecture, execution.Metadata.Hardware.CPUCount)
+
+	if len(execution.Metadata.Hardware.GPUs) > 0 {
+		fmt.Printf("🎮 GPUs:\n")
+		for _, gpu := range execution.Metadata.Hardware.GPUs {
+			fmt.Printf("   - %s", gpu.Name)
+			if gpu.Memory != "" {
+				fmt.Printf(" (%s)", gpu.Memory)
+			}
+			fmt.Println()
+		}
+	} else {
+		fmt.Println("🎮 No GPUs detected")
+	}
+
+	if execution.Metadata.Hardware.Cloud.Provider != "" {
+		fmt.Printf("☁️  Cloud: %s", execution.Metadata.Hardware.Cloud.Provider)
+		if execution.Metadata.Hardware.Cloud.SKU != "" {
+			fmt.Printf(" (%s)", execution.Metadata.Hardware.Cloud.SKU)
+		}
+		if execution.Metadata.Hardware.Cloud.Region != "" {
+			fmt.Printf(" in %s", execution.Metadata.Hardware.Cloud.Region)
+		}
+		fmt.Println()
+	}
+
+	fmt.Printf("⏱️  Total Duration: %s\n\n", execution.Metadata.Duration)
+
+	// Display model performance comparison
+	if len(execution.Results) > 1 {
+		displayModelComparisonWithPrompts(execution.Results, execution.Prompts)
+	} else if len(execution.Results) == 1 {
+		displaySingleModelAnalysis(execution.Results[0], execution.Prompts)
+	} else {
+		fmt.Println("⚠️  No results found in the summary file")
+	}
+
+	return nil
+}
+
+// displayModelComparisonWithPrompts shows a comparison table between multiple models using tablewriter
+func displayModelComparisonWithPrompts(results []ModelBenchmarkResult, prompts map[string]string) {
+	fmt.Printf("🏆 Model Performance Comparison\n")
+
+	// Sort by tokens per second (descending)
+	sortedResults := make([]ModelBenchmarkResult, len(results))
+	copy(sortedResults, results)
+	sort.Slice(sortedResults, func(i, j int) bool {
+		return sortedResults[i].TokensPerSec > sortedResults[j].TokensPerSec
+	})
+
+	// Prepare data for the table
+	var data [][]string
+	data = append(data, []string{"MODEL", "TOTAL TIME (S)", "AVG TIME (S)", "TOKENS", "TOKENS/SEC"})
+
+	// Add data rows
+	for _, result := range sortedResults {
+		data = append(data, []string{
+			truncateString(result.Model, 35),
+			fmt.Sprintf("%.2f", result.TotalTime),
+			fmt.Sprintf("%.2f", result.AverageTime),
+			fmt.Sprintf("%d", result.TotalTokens),
+			fmt.Sprintf("%.1f", result.TokensPerSec),
+		})
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.Header(data[0])
+	table.Bulk(data[1:])
+	table.Render()
+	fmt.Println()
+
+	// Display performance statistics
+	if len(results) > 1 {
+		fastest := sortedResults[0]
+		slowest := sortedResults[len(sortedResults)-1]
+
+		fmt.Printf("📈 Performance Insights:\n")
+		fmt.Printf("   🥇 Fastest: %s (%.1f tokens/sec)\n", fastest.Model, fastest.TokensPerSec)
+		fmt.Printf("   🐌 Slowest: %s (%.1f tokens/sec)\n", slowest.Model, slowest.TokensPerSec)
+
+		if slowest.TokensPerSec > 0 {
+			speedup := fastest.TokensPerSec / slowest.TokensPerSec
+			fmt.Printf("   ⚡ Speed difference: %.1fx faster\n", speedup)
+		}
+
+		// Calculate average performance
+		var totalTokensPerSec float64
+		for _, result := range results {
+			totalTokensPerSec += result.TokensPerSec
+		}
+		avgTokensPerSec := totalTokensPerSec / float64(len(results))
+		fmt.Printf("   📊 Average performance: %.1f tokens/sec\n\n", avgTokensPerSec)
+	}
+
+	// Display prompt performance summaries with prompts map
+	displayPromptPerformanceSummaryWithPrompts(results, prompts)
+}
+
+// displayPromptPerformanceSummaryWithPrompts shows performance tables for each prompt
+func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, prompts map[string]string) {
+	// First, gather all prompts and their results across all models
+	promptResults := make(map[string][]PromptPerformance)
+
+	// Extract prompt results from all models
+	for _, modelResult := range results {
+		for _, promptResult := range modelResult.PromptResults {
+			promptResults[promptResult.PromptChecksum] = append(promptResults[promptResult.PromptChecksum], PromptPerformance{
+				Model:        modelResult.Model,
+				TokensPerSec: promptResult.TokensPerSec,
+				Duration:     promptResult.Duration,
+				Tokens:       promptResult.Tokens,
+				Trial:        promptResult.Trial,
+			})
+		}
+	}
+
+	if len(promptResults) == 0 {
+		return
+	}
+
+	fmt.Printf("🎯 Prompt Performance Analysis\n")
+	fmt.Printf("═══════════════════════════════════════════════════════════════════\n\n")
+
+	// Display a table for each prompt
+	for promptChecksum, performances := range promptResults {
+		// Find the prompt text from the prompts map
+		promptText := prompts[promptChecksum]
+		if promptText == "" {
+			promptText = fmt.Sprintf("Prompt %s", promptChecksum[:8]) // Show first 8 chars of checksum
+		}
+
+		fmt.Printf("📝 Prompt: %s\n", truncateString(promptText, 80))
+		fmt.Printf("─────────────────────────────────────────────────────────────────\n")
+
+		// Sort by tokens per second (descending)
+		sort.Slice(performances, func(i, j int) bool {
+			return performances[i].TokensPerSec > performances[j].TokensPerSec
+		})
+
+		// Prepare data for the table
+		var data [][]string
+		data = append(data, []string{"RANK", "MODEL", "TOKENS/SEC", "TIME (S)", "TOKENS", "TRIAL"})
+
+		// Show top performers (limit to top 5 if there are many)
+		maxShow := len(performances)
+		if maxShow > 5 {
+			maxShow = 5
+		}
+
+		for i := 0; i < maxShow; i++ {
+			perf := performances[i]
+			rank := ""
+			switch i {
+			case 0:
+				rank = "🥇"
+			case 1:
+				rank = "🥈"
+			case 2:
+				rank = "🥉"
+			default:
+				rank = fmt.Sprintf("%d", i+1)
+			}
+
+			data = append(data, []string{
+				rank,
+				truncateString(perf.Model, 30),
+				fmt.Sprintf("%.1f", perf.TokensPerSec),
+				fmt.Sprintf("%.2f", perf.Duration),
+				fmt.Sprintf("%d", perf.Tokens),
+				fmt.Sprintf("%d", perf.Trial),
+			})
+		}
+
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader(data[0])
+		table.SetBorder(true)
+		table.SetCenterSeparator("│")
+		table.SetColumnSeparator("│")
+		table.SetRowSeparator("─")
+		table.SetHeaderAlignment(tablewriter.ALIGN_CENTER)
+		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		table.AppendBulk(data[1:])
+		table.Render()
+		fmt.Println()
+	}
+}
+
+// displaySingleModelAnalysis shows detailed analysis for a single model
+func displaySingleModelAnalysis(result ModelBenchmarkResult, prompts map[string]string) {
+	fmt.Printf("🔍 Single Model Analysis: %s\n", result.Model)
+	fmt.Printf("═══════════════════════════════════════════════════════════════════\n")
+	fmt.Printf("📊 Overall Performance:\n")
+	fmt.Printf("   Total Time: %.2f seconds\n", result.TotalTime)
+	fmt.Printf("   Average Time: %.2f seconds\n", result.AverageTime)
+	fmt.Printf("   Total Tokens: %d\n", result.TotalTokens)
+	fmt.Printf("   Tokens/Second: %.1f\n\n", result.TokensPerSec)
+
+	fmt.Printf("📈 Statistical Analysis:\n")
+	fmt.Printf("   Min Time: %.2f seconds\n", result.Aggregated.MinTime)
+	fmt.Printf("   Max Time: %.2f seconds\n", result.Aggregated.MaxTime)
+	fmt.Printf("   Std Deviation: %.2f seconds\n", result.Aggregated.StdDev)
+	fmt.Printf("   Min Tokens: %d\n", result.Aggregated.MinTokens)
+	fmt.Printf("   Max Tokens: %d\n\n", result.Aggregated.MaxTokens)
+
+	if len(result.PromptResults) > 0 {
+		fmt.Printf("🔸 Detailed Results by Prompt:\n")
+		for _, promptResult := range result.PromptResults {
+			// Find the prompt text using checksum
+			promptText := "Unknown prompt"
+			for checksum, text := range prompts {
+				if checksum == promptResult.PromptChecksum {
+					promptText = truncateString(text, 60)
+					break
+				}
+			}
+
+			fmt.Printf("   Trial %d | %s\n", promptResult.Trial, promptText)
+			fmt.Printf("     ➜ Tokens: %d | Time: %.2fs | Tokens/sec: %.1f\n\n",
+				promptResult.Tokens, promptResult.Duration, promptResult.TokensPerSec)
+		}
+	}
+}
+
+// PromptPerformance holds performance data for a specific prompt and model
+type PromptPerformance struct {
+	Model        string
+	TokensPerSec float64
+	Duration     float64
+	Tokens       int
+	Trial        int
+}
+
+// truncateString truncates a string to a maximum length and adds "..." if necessary
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen < 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
