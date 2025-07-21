@@ -305,17 +305,37 @@ func runAutomatedCompare(config Config) {
 		} else {
 			// Not a JSON file, can't evaluate
 			fmt.Printf("Error: Single file evaluation requires an enhanced-json (.json) file\n")
-			fmt.Printf("For comparing two log files, provide both --file1 and --file2\n")
+			fmt.Printf("For comparing two benchmark files, provide both --file1 and --file2\n")
 			return
 		}
 	} else {
-		// Two files - do traditional comparison
-		err := logs.CompareLogFiles(config.CompareFile1, config.CompareFile2)
-		if err != nil {
-			fmt.Printf(i18n.T("msg_compare_error")+"\n", err)
+		// Two files - check if they are enhanced JSON files for new comparison
+		file1IsJSON := strings.HasSuffix(strings.ToLower(config.CompareFile1), ".json")
+		file2IsJSON := strings.HasSuffix(strings.ToLower(config.CompareFile2), ".json")
+
+		if file1IsJSON && file2IsJSON {
+			// Use new enhanced JSON comparison
+			err := output.CompareBenchmarkFiles(config.CompareFile1, config.CompareFile2)
+			if err != nil {
+				fmt.Printf("Error comparing benchmark files: %v\n", err)
+				return
+			}
+			fmt.Println("✅ Benchmark comparison complete")
+		} else if !file1IsJSON && !file2IsJSON {
+			// Both are log files - use traditional comparison
+			err := logs.CompareLogFiles(config.CompareFile1, config.CompareFile2)
+			if err != nil {
+				fmt.Printf(i18n.T("msg_compare_error")+"\n", err)
+				return
+			}
+			fmt.Println(i18n.T("msg_compare_complete"))
+		} else {
+			// Mixed file types - not supported
+			fmt.Printf("Error: Both files must be of the same type (either both .json or both .txt/.log)\n")
+			fmt.Printf("File 1: %s\n", config.CompareFile1)
+			fmt.Printf("File 2: %s\n", config.CompareFile2)
 			return
 		}
-		fmt.Println(i18n.T("msg_compare_complete"))
 	}
 }
 

@@ -591,7 +591,7 @@ func EvaluateSummaryFile(filePath string) error {
 			fmt.Println()
 		}
 	} else {
-		fmt.Println("🎮 No GPUs detected")
+		fmt.Println("🎮  No GPUs detected")
 	}
 
 	if execution.Metadata.Hardware.Cloud.Provider != "" {
@@ -637,8 +637,8 @@ func displayModelComparisonWithPrompts(results []ModelBenchmarkResult, prompts m
 	// Add data rows
 	for _, result := range sortedResults {
 		data = append(data, []string{
-			truncateString(result.Model, 35),
-			fmt.Sprintf("%.2f", result.TotalTime),
+			result.Model, // Remove truncation to show full model name
+			fmt.Sprintf("%.1f", result.TotalTime),
 			fmt.Sprintf("%.2f", result.AverageTime),
 			fmt.Sprintf("%d", result.TotalTokens),
 			fmt.Sprintf("%.1f", result.TokensPerSec),
@@ -648,6 +648,12 @@ func displayModelComparisonWithPrompts(results []ModelBenchmarkResult, prompts m
 	table := tablewriter.NewWriter(os.Stdout)
 	table.Header(data[0])
 	table.Bulk(data[1:])
+
+	// Configure table to prevent truncation by setting a larger max width
+	table.Configure(func(cfg *tablewriter.Config) {
+		cfg.MaxWidth = 200 // Set a larger maximum width to prevent truncation
+	})
+
 	table.Render()
 	fmt.Println()
 
@@ -745,7 +751,7 @@ func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, 
 
 			data = append(data, []string{
 				rank,
-				truncateString(perf.Model, 30),
+				perf.Model, // Remove truncation to show full model name
 				fmt.Sprintf("%.1f", perf.TokensPerSec),
 				fmt.Sprintf("%.2f", perf.Duration),
 				fmt.Sprintf("%d", perf.Tokens),
@@ -756,6 +762,12 @@ func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, 
 		table := tablewriter.NewWriter(os.Stdout)
 		table.Header(data[0])
 		table.Bulk(data[1:])
+
+		// Configure table to prevent truncation by setting a larger max width
+		table.Configure(func(cfg *tablewriter.Config) {
+			cfg.MaxWidth = 200 // Set a larger maximum width to prevent truncation
+		})
+
 		table.Render()
 		fmt.Println()
 	}
