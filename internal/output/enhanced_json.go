@@ -22,8 +22,14 @@ import (
 // Enhanced data structures for comprehensive analysis
 type BenchmarkExecution struct {
 	Metadata ExecutionMetadata      `json:"metadata"`
-	Prompts  map[string]string      `json:"prompts"`
+	Prompts  map[string]PromptInfo  `json:"prompts"`
 	Results  []ModelBenchmarkResult `json:"results"`
+}
+
+// PromptInfo stores both the name and checksum for a prompt
+type PromptInfo struct {
+	Name     string `json:"name"`
+	Checksum string `json:"checksum"`
 }
 
 type ExecutionMetadata struct {
@@ -120,7 +126,7 @@ func createBenchmarkExecution(results []benchmark.BenchmarkResult, config Benchm
 			},
 			Configuration: config,
 		},
-		Prompts: make(map[string]string),
+		Prompts: make(map[string]PromptInfo),
 		Results: []ModelBenchmarkResult{},
 	}
 
@@ -150,8 +156,22 @@ func createBenchmarkExecution(results []benchmark.BenchmarkResult, config Benchm
 			// Calculate prompt checksum
 			promptChecksum := calculateChecksum(r.Prompt)
 
+			// Use prompt name if available, otherwise use a truncated version
+			promptName := r.PromptName
+			if promptName == "" {
+				// Fallback to truncated prompt for backward compatibility
+				if len(r.Prompt) > 50 {
+					promptName = r.Prompt[:47] + "..."
+				} else {
+					promptName = r.Prompt
+				}
+			}
+
 			// Add prompt to prompts map if not already present
-			execution.Prompts[promptChecksum] = r.Prompt
+			execution.Prompts[promptChecksum] = PromptInfo{
+				Name:     promptName,
+				Checksum: promptChecksum,
+			}
 
 			modelResult.PromptResults = append(modelResult.PromptResults, PromptResult{
 				PromptChecksum: promptChecksum,
@@ -620,7 +640,7 @@ func EvaluateSummaryFile(filePath string) error {
 }
 
 // displayModelComparisonWithPrompts shows a comparison table between multiple models using tablewriter
-func displayModelComparisonWithPrompts(results []ModelBenchmarkResult, prompts map[string]string) {
+func displayModelComparisonWithPrompts(results []ModelBenchmarkResult, prompts map[string]PromptInfo) {
 	fmt.Printf("🏆 Model Performance Comparison\n")
 
 	// Sort by tokens per second (descending)
@@ -685,7 +705,7 @@ func displayModelComparisonWithPrompts(results []ModelBenchmarkResult, prompts m
 }
 
 // displayPromptPerformanceSummaryWithPrompts shows performance tables for each prompt
-func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, prompts map[string]string) {
+func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, prompts map[string]PromptInfo) {
 	// First, gather all prompts and their results across all models
 	promptResults := make(map[string][]PromptPerformance)
 
@@ -712,7 +732,7 @@ func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, 
 	// Display a table for each prompt
 	for promptChecksum, performances := range promptResults {
 		// Find the prompt text from the prompts map
-		promptText := prompts[promptChecksum]
+		promptText := prompts[promptChecksum].Name
 		if promptText == "" {
 			promptText = fmt.Sprintf("Prompt %s", promptChecksum[:8]) // Show first 8 chars of checksum
 		}
@@ -774,7 +794,7 @@ func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, 
 }
 
 // displaySingleModelAnalysis shows detailed analysis for a single model
-func displaySingleModelAnalysis(result ModelBenchmarkResult, prompts map[string]string) {
+func displaySingleModelAnalysis(result ModelBenchmarkResult, prompts map[string]PromptInfo) {
 	fmt.Printf("🔍 Single Model Analysis: %s\n", result.Model)
 	fmt.Printf("═══════════════════════════════════════════════════════════════════\n")
 	fmt.Printf("📊 Overall Performance:\n")
@@ -795,9 +815,9 @@ func displaySingleModelAnalysis(result ModelBenchmarkResult, prompts map[string]
 		for _, promptResult := range result.PromptResults {
 			// Find the prompt text using checksum
 			promptText := "Unknown prompt"
-			for checksum, text := range prompts {
+			for checksum, info := range prompts {
 				if checksum == promptResult.PromptChecksum {
-					promptText = truncateString(text, 60)
+					promptText = truncateString(info.Name, 60)
 					break
 				}
 			}

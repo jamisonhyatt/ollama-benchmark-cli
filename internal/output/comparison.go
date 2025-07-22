@@ -40,7 +40,7 @@ type ModelDelta struct {
 // PromptDelta represents performance difference for a prompt between two runs
 type PromptDelta struct {
 	PromptChecksum    string             `json:"prompt_checksum"`
-	PromptText        string             `json:"prompt_text"`
+	PromptName        string             `json:"prompt_name"`
 	ModelPerformances []PromptModelDelta `json:"model_performances"`
 }
 
@@ -207,20 +207,20 @@ func calculateModelDeltas(run1Results, run2Results []ModelBenchmarkResult) []Mod
 func calculatePromptDeltas(run1, run2 BenchmarkExecution) []PromptDelta {
 	var deltas []PromptDelta
 
-	// Get all unique prompts
-	allPrompts := make(map[string]string)
-	for checksum, text := range run1.Prompts {
-		allPrompts[checksum] = text
+	// Get all unique prompts by checksum
+	allPrompts := make(map[string]PromptInfo)
+	for checksum, promptInfo := range run1.Prompts {
+		allPrompts[checksum] = promptInfo
 	}
-	for checksum, text := range run2.Prompts {
-		allPrompts[checksum] = text
+	for checksum, promptInfo := range run2.Prompts {
+		allPrompts[checksum] = promptInfo
 	}
 
 	// For each prompt, compare performance across models
-	for checksum, text := range allPrompts {
+	for checksum, promptInfo := range allPrompts {
 		delta := PromptDelta{
 			PromptChecksum: checksum,
-			PromptText:     text,
+			PromptName:     promptInfo.Name,
 		}
 
 		// Get performance data for this prompt from both runs
@@ -400,7 +400,7 @@ func displayHardwareComparison(diff HardwareDiff) {
 // displayModelComparison shows model performance differences
 func displayModelComparison(deltas []ModelDelta) {
 	fmt.Printf("🏆 Model Performance Comparison\n")
-	fmt.Printf("─────────────────────────────────────────────────────────────────\n")
+	fmt.Printf("──────────────��──────────────────────────────────────────────────\n")
 
 	var data [][]string
 	data = append(data, []string{"MODEL", "RUN 1 (T/S)", "RUN 2 (T/S)", "CHANGE", "CHANGE %", "STATUS"})
@@ -471,7 +471,7 @@ func displayPromptComparison(deltas []PromptDelta) {
 
 	for i := 0; i < maxPrompts; i++ {
 		delta := deltas[i]
-		fmt.Printf("📝 Prompt %d: %s\n", i+1, truncateString(delta.PromptText, 80))
+		fmt.Printf("📝 Prompt %d: %s\n", i+1, truncateString(delta.PromptName, 80))
 
 		var data [][]string
 		data = append(data, []string{"MODEL", "RUN 1 (T/S)", "RUN 2 (T/S)", "CHANGE", "CHANGE %"})
