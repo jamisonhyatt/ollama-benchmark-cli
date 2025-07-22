@@ -1,0 +1,49 @@
+prompts:
+  - prompt: |
+      What is the capital of France and what are its main historical landmarks?
+  - prompt: |
+      You are a helpful assistant. Please analyze the following code and explain what it does:
+
+      ```python
+      def fibonacci(n):
+          if n <= 1:
+              return n
+          return fibonacci(n-1) + fibonacci(n-2)
+      ```
+
+      Provide a step-by-step explanation and suggest any improvements.
+  - prompt: |
+      Write a comprehensive email to a client explaining the following:
+
+      Subject: Project Delay Notification
+
+      Dear [Client Name],
+
+      I hope this email finds you well. I am writing to inform you about a delay in our project timeline.
+
+      The delay is due to:
+      1. Unexpected technical challenges
+      2. Resource allocation issues
+      3. Third-party dependency delays
+
+      Please provide a professional and empathetic tone while explaining next steps.
+  - prompt: |
+      Create a JSON schema for a user profile that includes:
+      - Personal information (name, email, phone)
+      - Preferences (theme, language, notifications)
+      - Account settings (privacy, security)
+
+      The schema should be valid JSON Schema Draft 7 format.
+  - prompt: |
+      Translate the following paragraph to Spanish, maintaining the original formatting and line breaks:
+
+      "Artificial Intelligence is rapidly transforming our world.
+      From healthcare to transportation, AI is making significant impacts.
+
+      Key areas include:
+      • Machine Learning
+      • Natural Language Processing  
+      • Computer Vision
+      • Robotics
+
+      The future holds even more exciting possibilities."
