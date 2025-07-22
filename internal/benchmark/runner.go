@@ -8,15 +8,17 @@ import (
 	"time"
 
 	"ollama-benchmark/internal/i18n"
+	"ollama-benchmark/internal/prompt"
 )
 
 type BenchmarkResult struct {
-	Model     string
-	Prompt    string
-	Trial     int
-	Tokens    int
-	Duration  time.Duration
-	TokenPerS float64
+	Model      string
+	Prompt     string
+	PromptName string
+	Trial      int
+	Tokens     int
+	Duration   time.Duration
+	TokenPerS  float64
 }
 
 type ollamaRequest struct {
@@ -87,6 +89,74 @@ func RunBenchmark(apiURL, model string, prompts []string, trials int) ([]Benchma
 				Tokens:    tokenCount,
 				Duration:  duration,
 				TokenPerS: tokensPerSec,
+			})
+		}
+	}
+
+	// Stop the timer and move to next line
+	stopTimer <- true
+	fmt.Print("\n")
+
+	return results, nil
+}
+
+func RunBenchmarkWithNames(apiURL, model string, promptsWithNames []prompt.PromptWithName, trials int) ([]BenchmarkResult, error) {
+	// Start the elapsed time display
+	startTime := time.Now()
+	stopTimer := make(chan bool)
+
+	// Start a goroutine to continuously update the elapsed time
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-stopTimer:
+				return
+			case <-ticker.C:
+				elapsed := time.Since(startTime)
+				fmt.Printf("\r⏳ Running benchmark for '%s' with %d prompt(s) x %d trial(s)... %s",
+					model, len(promptsWithNames), trials, formatDuration(elapsed))
+			}
+		}
+	}()
+
+	// Warmup: ensure model is loaded
+	_, err := sendPrompt(apiURL, model, "Hello")
+	if err != nil {
+		stopTimer <- true
+		fmt.Print("\n") // Move to next line after stopping timer
+		return nil, fmt.Errorf("warmup failed: %w", err)
+	}
+
+	// Small delay to ensure model is fully loaded
+	time.Sleep(1 * time.Second)
+
+	var results []BenchmarkResult
+
+	for _, promptWithName := range promptsWithNames {
+		for i := 0; i < trials; i++ {
+			start := time.Now()
+
+			tokenCount, err := sendPrompt(apiURL, model, promptWithName.Prompt)
+			if err != nil {
+				stopTimer <- true
+				fmt.Print("\n") // Move to next line after stopping timer
+				return nil, fmt.Errorf(i18n.T("err_prompt_send"), model, err)
+			}
+
+			duration := time.Since(start)
+			tokensPerSec := float64(tokenCount) / duration.Seconds()
+
+			results = append(results, BenchmarkResult{
+				Model:      model,
+				Prompt:     promptWithName.Prompt,
+				PromptName: promptWithName.Name,
+				Trial:      i + 1,
+				Tokens:     tokenCount,
+				Duration:   duration,
+				TokenPerS:  tokensPerSec,
 			})
 		}
 	}

@@ -219,18 +219,25 @@ func runAutomatedQuick(config Config) {
 }
 
 func runAutomatedSettings(config Config) {
-	var prompts []string
+	var promptsWithNames []prompt.PromptWithName
 	var err error
 
 	// Get prompts
 	if config.PromptFile == "" {
-		prompts, err = prompt.GetDefaultPrompts()
+		prompts, err := prompt.GetDefaultPrompts()
 		if err != nil {
 			fmt.Printf("Error loading default prompts: %v\n", err)
 			return
 		}
+		// Convert default prompts to PromptWithName format
+		for i, p := range prompts {
+			promptsWithNames = append(promptsWithNames, prompt.PromptWithName{
+				Name:   fmt.Sprintf("Prompt %d", i+1),
+				Prompt: p,
+			})
+		}
 	} else {
-		prompts, err = prompt.ReadPromptsFromFile(config.PromptFile)
+		promptsWithNames, err = prompt.ReadPromptsWithNamesFromFile(config.PromptFile)
 		if err != nil {
 			fmt.Printf("Error reading prompt file: %v\n", err)
 			return
@@ -247,8 +254,8 @@ func runAutomatedSettings(config Config) {
 	// Run benchmarks
 	if len(config.Models) == 0 || (len(config.Models) == 1 && config.Models[0] == "all") {
 		// Use all models
-		allResults := runAllModels(config.APIUrl, models, prompts, config.Trials)
-		handleResults(allResults, config.Format, true, config.TokensOnly, config.APIUrl, prompts, config.Trials)
+		allResults := runAllModelsWithNames(config.APIUrl, models, promptsWithNames, config.Trials)
+		handleResultsWithNames(allResults, config.Format, true, config.TokensOnly, config.APIUrl, promptsWithNames, config.Trials)
 	} else {
 		// Validate all specified models exist first
 		for _, model := range config.Models {
@@ -271,7 +278,7 @@ func runAutomatedSettings(config Config) {
 		// Run benchmarks for specified models
 		var results []benchmark.BenchmarkResult
 		for _, model := range config.Models {
-			r, err := benchmark.RunBenchmark(config.APIUrl, model, prompts, config.Trials)
+			r, err := benchmark.RunBenchmarkWithNames(config.APIUrl, model, promptsWithNames, config.Trials)
 			if err != nil {
 				fmt.Printf("Error running benchmark for model %s: %v\n", model, err)
 				continue
@@ -287,7 +294,7 @@ func runAutomatedSettings(config Config) {
 
 		// Determine if this is multi-model (more than 1 model)
 		isMultiModel := len(config.Models) > 1
-		handleResults(results, config.Format, isMultiModel, config.TokensOnly, config.APIUrl, prompts, config.Trials)
+		handleResultsWithNames(results, config.Format, isMultiModel, config.TokensOnly, config.APIUrl, promptsWithNames, config.Trials)
 	}
 }
 
@@ -358,6 +365,25 @@ func runAllModels(apiURL string, models []string, prompts []string, trials int) 
 	return allResults
 }
 
+func runAllModelsWithNames(apiURL string, models []string, promptsWithNames []prompt.PromptWithName, trials int) []benchmark.BenchmarkResult {
+	var allResults []benchmark.BenchmarkResult
+	for _, model := range models {
+		results, err := benchmark.RunBenchmarkWithNames(apiURL, model, promptsWithNames, trials)
+		if err != nil {
+			fmt.Printf(i18n.T("msg_model_error")+"\n", model, err)
+			continue
+		}
+		allResults = append(allResults, results...)
+
+		// Unload the model after benchmarking to free memory
+		if err := client.UnloadModel(apiURL, model); err != nil {
+			fmt.Printf("Warning: Failed to unload model %s: %v\n", model, err)
+			// Continue anyway - this is not a critical error
+		}
+	}
+	return allResults
+}
+
 func handleResults(results []benchmark.BenchmarkResult, format string, isMultiModel bool, tokensOnly bool, apiURL string, prompts []string, trials int) {
 	if len(results) == 0 {
 		fmt.Println(i18n.T("msg_no_results"))
@@ -376,6 +402,67 @@ func handleResults(results []benchmark.BenchmarkResult, format string, isMultiMo
 	}
 
 	if format == "enhanced-json" {
+		// For enhanced-json, only create the enhanced JSON file
+		config := output.BenchmarkConfig{
+			APIEndpoint: apiURL,
+			Trials:      trials,
+			Prompts:     prompts,
+		}
+		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.json", timestamp())
+		output.WriteEnhancedJSON(summaryFile, results, config)
+		fmt.Printf("✅ "+i18n.T("msg_benchmark_complete")+" Enhanced JSON: %s\n", summaryFile)
+	} else {
+		// For other formats, create all the output files
+		modelGroups := output.GroupByModel(results)
+		for model, group := range modelGroups {
+			filename := fmt.Sprintf("benchmark_detail_%s_%s.txt", sanitizeFilename(model), timestamp())
+			output.WriteTXT(filename, group, false)
+		}
+
+		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.%s", timestamp(), format)
+		switch format {
+		case "csv":
+			output.WriteCSV(summaryFile, results)
+		case "json":
+			output.WriteJSON(summaryFile, results)
+		case "txt":
+			output.WriteTXT(summaryFile, results, tokensOnly)
+		}
+
+		if len(modelGroups) > 1 {
+			compFile := fmt.Sprintf("benchmark_summary_comparison_%s.txt", timestamp())
+			output.WriteComparison(compFile, results)
+		}
+
+		fmt.Println("✅ " + i18n.T("msg_benchmark_complete") + " Log: benchmark.log")
+	}
+
+	logs.AppendPerformanceLog(results)
+}
+
+func handleResultsWithNames(results []benchmark.BenchmarkResult, format string, isMultiModel bool, tokensOnly bool, apiURL string, promptsWithNames []prompt.PromptWithName, trials int) {
+	if len(results) == 0 {
+		fmt.Println(i18n.T("msg_no_results"))
+		return
+	}
+
+	output.FormatAsTable(results, tokensOnly)
+
+	if !isMultiModel {
+		output.PrintDetails(results)
+	}
+
+	// Show comparison for multi-model runs (regardless of output format)
+	if isMultiModel {
+		output.ShowComparison(results)
+	}
+
+	if format == "enhanced-json" {
+		// Convert promptsWithNames to []string for config
+		prompts := make([]string, len(promptsWithNames))
+		for i, p := range promptsWithNames {
+			prompts[i] = p.Prompt
+		}
 		// For enhanced-json, only create the enhanced JSON file
 		config := output.BenchmarkConfig{
 			APIEndpoint: apiURL,

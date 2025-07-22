@@ -65,7 +65,16 @@ func FormatAsTable(results []benchmark.BenchmarkResult, tokensOnly bool) {
 func PrintDetails(results []benchmark.BenchmarkResult) {
 	fmt.Println("\n" + i18n.T("details_title"))
 	for _, r := range results {
-		fmt.Printf("[%s] Trial %d | %s: %q\n", r.Model, r.Trial, i18n.T("field_prompt"), r.Prompt)
+		promptDisplay := r.PromptName
+		if promptDisplay == "" {
+			// Fallback to truncated prompt if no name is available
+			if len(r.Prompt) > 50 {
+				promptDisplay = r.Prompt[:47] + "..."
+			} else {
+				promptDisplay = r.Prompt
+			}
+		}
+		fmt.Printf("[%s] Trial %d | %s: %s\n", r.Model, r.Trial, i18n.T("field_prompt"), promptDisplay)
 		fmt.Printf("  ➜ %s: %d | %s: %.2fs | %s: %.2f\n\n",
 			i18n.T("field_tokens"), r.Tokens,
 			i18n.T("field_time"), r.Duration.Seconds(),

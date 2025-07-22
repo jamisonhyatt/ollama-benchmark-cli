@@ -23,12 +23,19 @@ type PromptFile struct {
 
 // PromptEntry represents a single prompt in the YAML file
 type PromptEntry struct {
+	Name   string `yaml:"name,omitempty"`
 	Prompt string `yaml:"prompt"`
 }
 
 // JSONLPrompt represents a single line in JSONL format
 type JSONLPrompt struct {
 	Prompt string `json:"prompt"`
+}
+
+// PromptWithName represents a prompt with an optional name
+type PromptWithName struct {
+	Name   string
+	Prompt string
 }
 
 // GetDefaultPrompts returns the embedded default prompts
@@ -62,6 +69,21 @@ func ReadPromptsFromFile(filePath string) ([]string, error) {
 		return readJSONLPrompts(filePath)
 	default:
 		return readTextPrompts(filePath)
+	}
+}
+
+// ReadPromptsWithNamesFromFile reads prompts and their names from an external file
+// Returns prompts with generated names if no name is provided
+func ReadPromptsWithNamesFromFile(filePath string) ([]PromptWithName, error) {
+	ext := strings.ToLower(filepath.Ext(filePath))
+
+	switch ext {
+	case ".yaml", ".yml":
+		return readYAMLPromptsWithNames(filePath)
+	case ".jsonl":
+		return readJSONLPromptsWithNames(filePath)
+	default:
+		return readTextPromptsWithNames(filePath)
 	}
 }
 
@@ -147,6 +169,119 @@ func readTextPrompts(filePath string) ([]string, error) {
 		if line != "" {
 			prompts = append(prompts, line)
 		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf(i18n.T("err_file_read"), err)
+	}
+
+	if len(prompts) == 0 {
+		return nil, fmt.Errorf(i18n.T("err_file_empty"))
+	}
+
+	return prompts, nil
+}
+
+// readYAMLPromptsWithNames reads prompts with names from a YAML file
+func readYAMLPromptsWithNames(filePath string) ([]PromptWithName, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf(i18n.T("err_file_open"), err)
+	}
+
+	var promptFile PromptFile
+	if err := yaml.Unmarshal(data, &promptFile); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML file: %v", err)
+	}
+
+	var prompts []PromptWithName
+	for i, entry := range promptFile.Prompts {
+		prompt := strings.TrimSpace(entry.Prompt)
+		if prompt != "" {
+			name := entry.Name
+			if name == "" {
+				name = fmt.Sprintf("Prompt %d", i+1)
+			}
+			prompts = append(prompts, PromptWithName{
+				Name:   name,
+				Prompt: prompt,
+			})
+		}
+	}
+
+	if len(prompts) == 0 {
+		return nil, fmt.Errorf(i18n.T("err_file_empty"))
+	}
+
+	return prompts, nil
+}
+
+// readJSONLPromptsWithNames reads prompts with names from a JSONL file
+func readJSONLPromptsWithNames(filePath string) ([]PromptWithName, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf(i18n.T("err_file_open"), err)
+	}
+	defer file.Close()
+
+	var prompts []PromptWithName
+	scanner := bufio.NewScanner(file)
+	lineNum := 1
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			lineNum++
+			continue
+		}
+
+		var jsonPrompt JSONLPrompt
+		if err := json.Unmarshal([]byte(line), &jsonPrompt); err != nil {
+			return nil, fmt.Errorf("failed to parse JSONL line %d: %v", lineNum, err)
+		}
+
+		prompt := strings.TrimSpace(jsonPrompt.Prompt)
+		if prompt != "" {
+			prompts = append(prompts, PromptWithName{
+				Name:   fmt.Sprintf("Prompt %d", lineNum),
+				Prompt: prompt,
+			})
+		}
+		lineNum++
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf(i18n.T("err_file_read"), err)
+	}
+
+	if len(prompts) == 0 {
+		return nil, fmt.Errorf(i18n.T("err_file_empty"))
+	}
+
+	return prompts, nil
+}
+
+// readTextPromptsWithNames reads prompts with names from a plain text file
+func readTextPromptsWithNames(filePath string) ([]PromptWithName, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf(i18n.T("err_file_open"), err)
+	}
+	defer file.Close()
+
+	var prompts []PromptWithName
+	scanner := bufio.NewScanner(file)
+	lineNum := 1
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			prompts = append(prompts, PromptWithName{
+				Name:   fmt.Sprintf("Prompt %d", lineNum),
+				Prompt: line,
+			})
+		}
+		lineNum++
 	}
 
 	if err := scanner.Err(); err != nil {

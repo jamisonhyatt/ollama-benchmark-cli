@@ -1,7 +1,9 @@
 prompts:
-  - prompt: |
+  - name: "Geography Question"
+    prompt: |
       What is the capital of France and what are its main historical landmarks?
-  - prompt: |
+  - name: "Code Analysis"
+    prompt: |
       You are a helpful assistant. Please analyze the following code and explain what it does:
 
       ```python
@@ -12,7 +14,8 @@ prompts:
       ```
 
       Provide a step-by-step explanation and suggest any improvements.
-  - prompt: |
+  - name: "Professional Email"
+    prompt: |
       Write a comprehensive email to a client explaining the following:
 
       Subject: Project Delay Notification
@@ -27,14 +30,16 @@ prompts:
       3. Third-party dependency delays
 
       Please provide a professional and empathetic tone while explaining next steps.
-  - prompt: |
+  - name: "JSON Schema Creation"
+    prompt: |
       Create a JSON schema for a user profile that includes:
       - Personal information (name, email, phone)
       - Preferences (theme, language, notifications)
       - Account settings (privacy, security)
 
       The schema should be valid JSON Schema Draft 7 format.
-  - prompt: |
+  - name: "Spanish Translation"
+    prompt: |
       Translate the following paragraph to Spanish, maintaining the original formatting and line breaks:
 
       "Artificial Intelligence is rapidly transforming our world.
