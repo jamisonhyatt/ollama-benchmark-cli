@@ -64,7 +64,7 @@ type CloudInfo struct {
 type BenchmarkConfig struct {
 	APIEndpoint string   `json:"api_endpoint"`
 	Trials      int      `json:"trials"`
-	Prompts     []string `json:"prompts"`
+	PromptNames []string `json:"prompt_names"`
 }
 
 type ModelBenchmarkResult struct {
@@ -598,7 +598,7 @@ func EvaluateSummaryFile(filePath string) error {
 	fmt.Printf("📊 Benchmark Summary Analysis\n")
 	fmt.Printf("═══════════════════════════════════════\n")
 	fmt.Printf("🕐 Execution Time: %s\n", execution.Metadata.Timestamp.Format("2006-01-02 15:04:05"))
-	fmt.Printf("⚙️  Configuration: %d trials, %d prompts\n", execution.Metadata.Configuration.Trials, len(execution.Metadata.Configuration.Prompts))
+	fmt.Printf("⚙️  Configuration: %d trials, %d prompts\n", execution.Metadata.Configuration.Trials, len(execution.Metadata.Configuration.PromptNames))
 	fmt.Printf("🖥️  Hardware: %s/%s (%d CPUs)\n", execution.Metadata.Hardware.OS, execution.Metadata.Hardware.Architecture, execution.Metadata.Hardware.CPUCount)
 
 	if len(execution.Metadata.Hardware.GPUs) > 0 {
@@ -760,7 +760,7 @@ func displayPromptPerformanceSummaryWithPrompts(results []ModelBenchmarkResult, 
 			rank := ""
 			switch i {
 			case 0:
-				rank = "🥇"
+				rank = "����"
 			case 1:
 				rank = "🥈"
 			case 2:

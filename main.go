@@ -402,11 +402,13 @@ func handleResults(results []benchmark.BenchmarkResult, format string, isMultiMo
 	}
 
 	if format == "enhanced-json" {
+		// Extract unique prompt names from results
+		promptNames := extractPromptNames(results)
 		// For enhanced-json, only create the enhanced JSON file
 		config := output.BenchmarkConfig{
 			APIEndpoint: apiURL,
 			Trials:      trials,
-			Prompts:     prompts,
+			PromptNames: promptNames,
 		}
 		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.json", timestamp())
 		output.WriteEnhancedJSON(summaryFile, results, config)
@@ -458,16 +460,16 @@ func handleResultsWithNames(results []benchmark.BenchmarkResult, format string, 
 	}
 
 	if format == "enhanced-json" {
-		// Convert promptsWithNames to []string for config
-		prompts := make([]string, len(promptsWithNames))
+		// Extract prompt names from promptsWithNames
+		promptNames := make([]string, len(promptsWithNames))
 		for i, p := range promptsWithNames {
-			prompts[i] = p.Prompt
+			promptNames[i] = p.Name
 		}
 		// For enhanced-json, only create the enhanced JSON file
 		config := output.BenchmarkConfig{
 			APIEndpoint: apiURL,
 			Trials:      trials,
-			Prompts:     prompts,
+			PromptNames: promptNames,
 		}
 		summaryFile := fmt.Sprintf("benchmark_summary_result_%s.json", timestamp())
 		output.WriteEnhancedJSON(summaryFile, results, config)
@@ -499,6 +501,31 @@ func handleResultsWithNames(results []benchmark.BenchmarkResult, format string, 
 	}
 
 	logs.AppendPerformanceLog(results)
+}
+
+// extractPromptNames extracts unique prompt names from benchmark results
+func extractPromptNames(results []benchmark.BenchmarkResult) []string {
+	seen := make(map[string]bool)
+	var promptNames []string
+
+	for _, result := range results {
+		name := result.PromptName
+		if name == "" {
+			// Fallback to truncated prompt for backward compatibility
+			if len(result.Prompt) > 50 {
+				name = result.Prompt[:47] + "..."
+			} else {
+				name = result.Prompt
+			}
+		}
+
+		if !seen[name] {
+			seen[name] = true
+			promptNames = append(promptNames, name)
+		}
+	}
+
+	return promptNames
 }
 
 func timestamp() string {
